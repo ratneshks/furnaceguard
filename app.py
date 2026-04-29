@@ -141,9 +141,7 @@ if 'start_time' not in st.session_state:
     st.session_state.start_time = datetime.now()
 
 from data_stream import get_realtime_data_generator
-if 'data_gen' not in st.session_state:
-    st.session_state.data_gen = get_realtime_data_generator()
-data_gen = st.session_state.data_gen
+data_gen = get_realtime_data_generator()
 
 CL = dict(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(10,16,32,0.6)",
     font=dict(family="Inter", color="#778", size=10),
@@ -153,109 +151,109 @@ CL = dict(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(10,16,32,0.6)",
 
 COST_PER_HOUR_DOWNTIME = 8.5  # ₹ Lakhs per hour of unplanned downtime
 
-# --- MAIN EXECUTION ---
-r = next(data_gen)
-row = {k: r[k] for k in ["Timestamp"] + feature_cols}
-st.session_state.history = pd.concat([st.session_state.history, pd.DataFrame([row])], ignore_index=True).tail(50)
-df_h = st.session_state.history
+# --- LOOP ---
+for tick in range(2000):
+    r = next(data_gen)
+    row = {k: r[k] for k in ["Timestamp"] + feature_cols}
+    st.session_state.history = pd.concat([st.session_state.history, pd.DataFrame([row])], ignore_index=True).tail(50)
+    df_h = st.session_state.history
 
-X = pd.DataFrame([r])[feature_cols]
-rul = max(0.0, float(model.predict(scaler.transform(X))[0]))
-health = min(100.0, max(0.0, (rul / 250.0) * 100))
+    X = pd.DataFrame([r])[feature_cols]
+    rul = max(0.0, float(model.predict(scaler.transform(X))[0]))
+    health = min(100.0, max(0.0, (rul / 250.0) * 100))
 
-# KPIs
-kd = [("📳","Vibration",f"{r['Vibration_Velocity_mm_s']:.2f}","mm/s"),
-      ("🌡️","Motor Temp",f"{r['Motor_Temperature_C']:.1f}","°C"),
-      ("🔊","Acoustic",f"{r['Acoustic_Frequency_Hz']:.0f}","Hz"),
-      ("⚖️","Roll Load",f"{r['Load_Tonnage']:.1f}","Tonnes")]
-for i,(ic,lb,vl,un) in enumerate(kd):
-    kpi_ph[i].markdown(f'<div class="kpi"><div class="ic">{ic}</div><div class="lb">{lb}</div><div class="vl">{vl}</div><div class="un">{un}</div></div>', unsafe_allow_html=True)
+    # KPIs
+    kd = [("📳","Vibration",f"{r['Vibration_Velocity_mm_s']:.2f}","mm/s"),
+          ("🌡️","Motor Temp",f"{r['Motor_Temperature_C']:.1f}","°C"),
+          ("🔊","Acoustic",f"{r['Acoustic_Frequency_Hz']:.0f}","Hz"),
+          ("⚖️","Roll Load",f"{r['Load_Tonnage']:.1f}","Tonnes")]
+    for i,(ic,lb,vl,un) in enumerate(kd):
+        kpi_ph[i].markdown(f'<div class="kpi"><div class="ic">{ic}</div><div class="lb">{lb}</div><div class="vl">{vl}</div><div class="un">{un}</div></div>', unsafe_allow_html=True)
 
-# Gauge
-gc = "#1e8e3e" if health >= 70 else "#FFBF00" if health >= 30 else "#E31837"
-fg = go.Figure(go.Indicator(mode="gauge+number", value=health,
-    number=dict(suffix="%", font=dict(size=36, color="#fff", family="Inter")),
-    title=dict(text="Equipment Health", font=dict(size=12, color="#889", family="Inter")),
-    gauge=dict(axis=dict(range=[0,100], tickcolor="#334", tickwidth=1, dtick=25),
-        bar=dict(color=gc, thickness=0.28), bgcolor="rgba(0,0,0,0)", borderwidth=0,
-        steps=[dict(range=[0,30],color="rgba(227,24,55,0.08)"),
-               dict(range=[30,70],color="rgba(255,191,0,0.06)"),
-               dict(range=[70,100],color="rgba(30,142,62,0.06)")],
-        threshold=dict(line=dict(color="#E31837",width=2),thickness=0.75,value=20))))
-fg.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(family="Inter",color="#889"), height=240, margin=dict(l=25,r=25,t=55,b=15))
-gauge_ph.plotly_chart(fg, use_container_width=True)
+    # Gauge
+    gc = "#1e8e3e" if health >= 70 else "#FFBF00" if health >= 30 else "#E31837"
+    fg = go.Figure(go.Indicator(mode="gauge+number", value=health,
+        number=dict(suffix="%", font=dict(size=36, color="#fff", family="Inter")),
+        title=dict(text="Equipment Health", font=dict(size=12, color="#889", family="Inter")),
+        gauge=dict(axis=dict(range=[0,100], tickcolor="#334", tickwidth=1, dtick=25),
+            bar=dict(color=gc, thickness=0.28), bgcolor="rgba(0,0,0,0)", borderwidth=0,
+            steps=[dict(range=[0,30],color="rgba(227,24,55,0.08)"),
+                   dict(range=[30,70],color="rgba(255,191,0,0.06)"),
+                   dict(range=[70,100],color="rgba(30,142,62,0.06)")],
+            threshold=dict(line=dict(color="#E31837",width=2),thickness=0.75,value=20))))
+    fg.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter",color="#889"), height=240, margin=dict(l=25,r=25,t=55,b=15))
+    gauge_ph.plotly_chart(fg, use_container_width=True)
 
-# RUL
-rul_ph.markdown(f'<div class="rul-box"><div class="lb">Predicted Remaining Useful Life</div><div class="vl">{rul:.1f}</div><div class="un">Hours until maintenance required</div></div>', unsafe_allow_html=True)
+    # RUL
+    rul_ph.markdown(f'<div class="rul-box"><div class="lb">Predicted Remaining Useful Life</div><div class="vl">{rul:.1f}</div><div class="un">Hours until maintenance required</div></div>', unsafe_allow_html=True)
 
-# Status
-current_level = "green" if rul > 72 else "amber" if rul >= 24 else "red"
-if current_level == "green":
-    status_ph.markdown('<div class="st-g"><div><span class="dot"></span><span class="tx">All Systems Nominal</span></div><div class="su">No action required</div></div>', unsafe_allow_html=True)
-elif current_level == "amber":
-    status_ph.markdown('<div class="st-a"><div><span class="dot"></span><span class="tx">Maintenance Soon</span></div><div class="su">Schedule inspection within 24h</div></div>', unsafe_allow_html=True)
-    if st.session_state.last_alert_level != "amber":
-        st.session_state.action_log.insert(0, {"Time": datetime.now().strftime("%H:%M:%S"), "Level": "Amber", "Detail": f"RUL dropped to {rul:.1f}h — schedule maintenance"})
-        st.session_state.alert_count["amber"] += 1
-else:
-    status_ph.markdown('<div class="st-r"><div><span class="dot"></span><span class="tx">CRITICAL ALERT</span></div><div class="su">Immediate shutdown recommended</div></div>', unsafe_allow_html=True)
-    if st.session_state.last_alert_level != "red":
-        st.session_state.action_log.insert(0, {"Time": datetime.now().strftime("%H:%M:%S"), "Level": "Red", "Detail": f"CRITICAL — RUL is {rul:.1f}h — stop mill immediately"})
-        st.session_state.alert_count["red"] += 1
-st.session_state.last_alert_level = current_level
+    # Status
+    current_level = "green" if rul > 72 else "amber" if rul >= 24 else "red"
+    if current_level == "green":
+        status_ph.markdown('<div class="st-g"><div><span class="dot"></span><span class="tx">All Systems Nominal</span></div><div class="su">No action required</div></div>', unsafe_allow_html=True)
+    elif current_level == "amber":
+        status_ph.markdown('<div class="st-a"><div><span class="dot"></span><span class="tx">Maintenance Soon</span></div><div class="su">Schedule inspection within 24h</div></div>', unsafe_allow_html=True)
+        if st.session_state.last_alert_level != "amber":
+            st.session_state.action_log.insert(0, {"Time": datetime.now().strftime("%H:%M:%S"), "Level": "Amber", "Detail": f"RUL dropped to {rul:.1f}h — schedule maintenance"})
+            st.session_state.alert_count["amber"] += 1
+    else:
+        status_ph.markdown('<div class="st-r"><div><span class="dot"></span><span class="tx">CRITICAL ALERT</span></div><div class="su">Immediate shutdown recommended</div></div>', unsafe_allow_html=True)
+        if st.session_state.last_alert_level != "red":
+            st.session_state.action_log.insert(0, {"Time": datetime.now().strftime("%H:%M:%S"), "Level": "Red", "Detail": f"CRITICAL — RUL is {rul:.1f}h — stop mill immediately"})
+            st.session_state.alert_count["red"] += 1
+    st.session_state.last_alert_level = current_level
 
-# ROI Card
-uptime_min = (datetime.now() - st.session_state.start_time).total_seconds() / 60
-avoided = st.session_state.alert_count["red"]
-savings = avoided * 2.0 * COST_PER_HOUR_DOWNTIME
-roi_ph.markdown(f'<div class="roi"><div class="rl">Est. Downtime Savings</div><div class="rv">₹{savings:.1f}L</div><div class="rs">{avoided} critical failures predicted<br>Session: {uptime_min:.0f} min</div></div>', unsafe_allow_html=True)
+    # ROI Card
+    uptime_min = (datetime.now() - st.session_state.start_time).total_seconds() / 60
+    avoided = st.session_state.alert_count["red"]
+    savings = avoided * 2.0 * COST_PER_HOUR_DOWNTIME
+    roi_ph.markdown(f'<div class="roi"><div class="rl">Est. Downtime Savings</div><div class="rv">₹{savings:.1f}L</div><div class="rs">{avoided} critical failures predicted<br>Session: {uptime_min:.0f} min</div></div>', unsafe_allow_html=True)
 
-# Charts
-def make_chart(df, col, title, color, fill_color, danger_val):
-    f = go.Figure()
-    f.add_trace(go.Scatter(x=df["Timestamp"], y=df[col], mode="lines", name=title,
-        line=dict(color=color, width=2.2), fill="tozeroy", fillcolor=fill_color))
-    f.add_hline(y=danger_val, line_dash="dash", line_color="#E31837", line_width=1.2,
-        annotation_text="Danger", annotation_font_color="#E31837", annotation_font_size=10)
-    f.update_layout(title=dict(text=title, font=dict(size=12, color="#a0b0c4")), showlegend=False, **CL)
-    return f
+    # Charts
+    def make_chart(df, col, title, color, fill_color, danger_val):
+        f = go.Figure()
+        f.add_trace(go.Scatter(x=df["Timestamp"], y=df[col], mode="lines", name=title,
+            line=dict(color=color, width=2.2), fill="tozeroy", fillcolor=fill_color))
+        f.add_hline(y=danger_val, line_dash="dash", line_color="#E31837", line_width=1.2,
+            annotation_text="Danger", annotation_font_color="#E31837", annotation_font_size=10)
+        f.update_layout(title=dict(text=title, font=dict(size=12, color="#a0b0c4")), showlegend=False, **CL)
+        return f
 
-vib_ph.plotly_chart(make_chart(df_h, "Vibration_Velocity_mm_s", "Vibration Velocity (mm/s)", "#4da6ff", "rgba(77,166,255,0.06)", DANGER_VIB), use_container_width=True)
-temp_ph.plotly_chart(make_chart(df_h, "Motor_Temperature_C", "Motor Temperature (°C)", "#FFBF00", "rgba(255,191,0,0.05)", DANGER_TEMP), use_container_width=True)
+    vib_ph.plotly_chart(make_chart(df_h, "Vibration_Velocity_mm_s", "Vibration Velocity (mm/s)", "#4da6ff", "rgba(77,166,255,0.06)", DANGER_VIB), use_container_width=True)
+    temp_ph.plotly_chart(make_chart(df_h, "Motor_Temperature_C", "Motor Temperature (°C)", "#FFBF00", "rgba(255,191,0,0.05)", DANGER_TEMP), use_container_width=True)
 
-fac = go.Figure()
-fac.add_trace(go.Scatter(x=df_h["Timestamp"], y=df_h["Acoustic_Frequency_Hz"], mode="lines",
-    line=dict(color="#a855f7", width=2.2), fill="tozeroy", fillcolor="rgba(168,85,247,0.05)"))
-fac.update_layout(title=dict(text="Acoustic Frequency (Hz)", font=dict(size=12, color="#a0b0c4")), showlegend=False, **CL)
-ac_ph.plotly_chart(fac, use_container_width=True)
+    fac = go.Figure()
+    fac.add_trace(go.Scatter(x=df_h["Timestamp"], y=df_h["Acoustic_Frequency_Hz"], mode="lines",
+        line=dict(color="#a855f7", width=2.2), fill="tozeroy", fillcolor="rgba(168,85,247,0.05)"))
+    fac.update_layout(title=dict(text="Acoustic Frequency (Hz)", font=dict(size=12, color="#a0b0c4")), showlegend=False, **CL)
+    ac_ph.plotly_chart(fac, use_container_width=True)
 
-fld = go.Figure()
-fld.add_trace(go.Scatter(x=df_h["Timestamp"], y=df_h["Load_Tonnage"], mode="lines",
-    line=dict(color="#06b6d4", width=2.2), fill="tozeroy", fillcolor="rgba(6,182,212,0.05)"))
-fld.update_layout(title=dict(text="Roll Load (Tonnes)", font=dict(size=12, color="#a0b0c4")), showlegend=False, **CL)
-load_ph.plotly_chart(fld, use_container_width=True)
+    fld = go.Figure()
+    fld.add_trace(go.Scatter(x=df_h["Timestamp"], y=df_h["Load_Tonnage"], mode="lines",
+        line=dict(color="#06b6d4", width=2.2), fill="tozeroy", fillcolor="rgba(6,182,212,0.05)"))
+    fld.update_layout(title=dict(text="Roll Load (Tonnes)", font=dict(size=12, color="#a0b0c4")), showlegend=False, **CL)
+    load_ph.plotly_chart(fld, use_container_width=True)
 
-# Maintenance Recommendation
-if rul > 150:
-    rec_ph.markdown('<div class="rec"><div class="rt">✅ Continue Normal Operation</div><div class="rd">All parameters within ISO 10816 limits. Next scheduled inspection: per maintenance calendar.</div></div>', unsafe_allow_html=True)
-elif rul > 72:
-    rec_ph.markdown('<div class="rec"><div class="rt">📋 Plan Preventive Maintenance</div><div class="rd">Bearing vibration trending upward. Order replacement bearings (SKF 6310-2RS). Schedule lubrication check within 48 hours.</div></div>', unsafe_allow_html=True)
-elif rul >= 24:
-    rec_ph.markdown(f'<div class="rec" style="border-color:#FFBF00"><div class="rt" style="color:#FFBF00">⚠️ Schedule Urgent Maintenance — {rul:.0f}h Remaining</div><div class="rd">Motor temperature elevated. Inspect drive motor bearings, check coolant flow rate, and verify roll alignment. Assign maintenance crew for next shift changeover.</div></div>', unsafe_allow_html=True)
-else:
-    rec_ph.markdown(f'<div class="rec" style="border-color:#E31837"><div class="rt" style="color:#ff4d6a">🚨 EMERGENCY — Initiate Controlled Shutdown ({rul:.0f}h RUL)</div><div class="rd">Multiple sensor thresholds breached. Execute Emergency Procedure EP-TCM-003: Reduce rolling speed to 50%, alert floor supervisor, begin controlled mill stop sequence. Dispatch maintenance team immediately.</div></div>', unsafe_allow_html=True)
+    # Maintenance Recommendation
+    if rul > 150:
+        rec_ph.markdown('<div class="rec"><div class="rt">✅ Continue Normal Operation</div><div class="rd">All parameters within ISO 10816 limits. Next scheduled inspection: per maintenance calendar.</div></div>', unsafe_allow_html=True)
+    elif rul > 72:
+        rec_ph.markdown('<div class="rec"><div class="rt">📋 Plan Preventive Maintenance</div><div class="rd">Bearing vibration trending upward. Order replacement bearings (SKF 6310-2RS). Schedule lubrication check within 48 hours.</div></div>', unsafe_allow_html=True)
+    elif rul >= 24:
+        rec_ph.markdown(f'<div class="rec" style="border-color:#FFBF00"><div class="rt" style="color:#FFBF00">⚠️ Schedule Urgent Maintenance — {rul:.0f}h Remaining</div><div class="rd">Motor temperature elevated. Inspect drive motor bearings, check coolant flow rate, and verify roll alignment. Assign maintenance crew for next shift changeover.</div></div>', unsafe_allow_html=True)
+    else:
+        rec_ph.markdown(f'<div class="rec" style="border-color:#E31837"><div class="rt" style="color:#ff4d6a">🚨 EMERGENCY — Initiate Controlled Shutdown ({rul:.0f}h RUL)</div><div class="rd">Multiple sensor thresholds breached. Execute Emergency Procedure EP-TCM-003: Reduce rolling speed to 50%, alert floor supervisor, begin controlled mill stop sequence. Dispatch maintenance team immediately.</div></div>', unsafe_allow_html=True)
 
-# Action Log
-logs = st.session_state.action_log[:12]
-if logs:
-    rows = ""
-    for lg in logs:
-        bc = "br-r" if lg["Level"] == "Red" else "br-a"
-        rows += f'<tr><td>{lg["Time"]}</td><td><span class="br {bc}">{lg["Level"]}</span></td><td>{lg["Detail"]}</td></tr>'
-    log_ph.markdown(f'<div class="gc"><table class="lt"><thead><tr><th>Time</th><th>Level</th><th>Detail</th></tr></thead><tbody>{rows}</tbody></table></div>', unsafe_allow_html=True)
-else:
-    log_ph.markdown('<div class="gc" style="text-align:center;padding:24px;color:#556">✅ No alerts — all systems operating within safe parameters</div>', unsafe_allow_html=True)
+    # Action Log
+    logs = st.session_state.action_log[:12]
+    if logs:
+        rows = ""
+        for lg in logs:
+            bc = "br-r" if lg["Level"] == "Red" else "br-a"
+            rows += f'<tr><td>{lg["Time"]}</td><td><span class="br {bc}">{lg["Level"]}</span></td><td>{lg["Detail"]}</td></tr>'
+        log_ph.markdown(f'<div class="gc"><table class="lt"><thead><tr><th>Time</th><th>Level</th><th>Detail</th></tr></thead><tbody>{rows}</tbody></table></div>', unsafe_allow_html=True)
+    else:
+        log_ph.markdown('<div class="gc" style="text-align:center;padding:24px;color:#556">✅ No alerts — all systems operating within safe parameters</div>', unsafe_allow_html=True)
 
-time.sleep(1)
-st.rerun()
+    time.sleep(1)
