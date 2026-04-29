@@ -28,6 +28,7 @@ def load_ml():
 art = load_ml()
 model, scaler, feature_cols = art["model"], art["scaler"], art["features"]
 model_metrics = art.get("metrics", {"mae": 0, "r2": 0})
+feat_imp = art.get("feature_importance", {})
 
 # --- CSS ---
 st.markdown("""<style>
@@ -231,6 +232,77 @@ def live_dashboard():
     c3, c4 = st.columns(2)
     c3.plotly_chart(make_chart(df_h, "Acoustic_Frequency_Hz", "Acoustic Frequency (Hz)", "#a855f7", "rgba(168,85,247,0.05)"), use_container_width=True)
     c4.plotly_chart(make_chart(df_h, "Load_Tonnage", "Roll Load (Tonnes)", "#06b6d4", "rgba(6,182,212,0.05)"), use_container_width=True)
+
+    # --- FEATURE IMPORTANCE + SESSION STATS ---
+    st.markdown('<div class="sec">🔬 AI Model Insights & Session Statistics</div>', unsafe_allow_html=True)
+    ins_c1, ins_c2 = st.columns(2)
+
+    # Feature Importance Chart
+    with ins_c1:
+        if feat_imp:
+            labels = {
+                "Vibration_Velocity_mm_s": "Vibration",
+                "Motor_Temperature_C": "Temperature",
+                "Acoustic_Frequency_Hz": "Acoustic Freq.",
+                "Load_Tonnage": "Roll Load",
+            }
+            sorted_imp = sorted(feat_imp.items(), key=lambda x: x[1], reverse=True)
+            names = [labels.get(k, k) for k, _ in sorted_imp]
+            vals = [v * 100 for _, v in sorted_imp]
+            colors = ["#4da6ff", "#FFBF00", "#a855f7", "#06b6d4"]
+
+            fi_fig = go.Figure(go.Bar(
+                x=vals, y=names, orientation="h",
+                marker=dict(color=colors[:len(names)],
+                            line=dict(width=0)),
+                text=[f"{v:.1f}%" for v in vals],
+                textposition="auto",
+                textfont=dict(color="#fff", size=11, family="Inter"),
+            ))
+            fi_fig.update_layout(
+                title=dict(text="Feature Importance — What Drives Predictions",
+                           font=dict(size=12, color="#a0b0c4")),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(10,16,32,0.6)",
+                font=dict(family="Inter", color="#889", size=11),
+                margin=dict(l=100, r=20, t=40, b=20),
+                height=260,
+                xaxis=dict(title="Importance (%)", gridcolor="rgba(255,255,255,0.03)",
+                           showgrid=True, zeroline=False, range=[0, max(vals) * 1.15]),
+                yaxis=dict(gridcolor="rgba(255,255,255,0.03)", autorange="reversed"),
+                showlegend=False,
+            )
+            st.plotly_chart(fi_fig, use_container_width=True)
+        else:
+            st.info("Feature importance data not available in this model version.")
+
+    # Session Statistics Table
+    with ins_c2:
+        if len(df_h) > 1:
+            stat_labels = {
+                "Vibration_Velocity_mm_s": ("Vibration", "mm/s"),
+                "Motor_Temperature_C": ("Motor Temp", "°C"),
+                "Acoustic_Frequency_Hz": ("Acoustic", "Hz"),
+                "Load_Tonnage": ("Roll Load", "T"),
+            }
+            stat_rows = ""
+            for col, (name, unit) in stat_labels.items():
+                mn = df_h[col].min()
+                mx = df_h[col].max()
+                av = df_h[col].mean()
+                sd = df_h[col].std()
+                stat_rows += f'<tr><td style="font-weight:600;color:#c8d6e5">{name}</td><td>{mn:.2f} {unit}</td><td>{mx:.2f} {unit}</td><td>{av:.2f} {unit}</td><td>{sd:.2f}</td></tr>'
+            st.markdown(f'''
+            <div style="margin-top:4px">
+                <div style="font-size:12px;color:#a0b0c4;font-weight:600;margin-bottom:10px">Session Statistics — Trailing {len(df_h)} Readings</div>
+                <table class="lt" style="width:100%">
+                    <thead><tr><th>Sensor</th><th>Min</th><th>Max</th><th>Avg</th><th>Std Dev</th></tr></thead>
+                    <tbody>{stat_rows}</tbody>
+                </table>
+            </div>
+            ''', unsafe_allow_html=True)
+        else:
+            st.markdown('<div style="text-align:center;padding:40px;color:#556">Collecting data...</div>', unsafe_allow_html=True)
 
     # --- MAINTENANCE RECOMMENDATION ---
     st.markdown('<div class="sec">🔧 Maintenance Recommendation</div>', unsafe_allow_html=True)
