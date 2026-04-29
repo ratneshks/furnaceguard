@@ -183,7 +183,7 @@ for tick in range(2000):
             threshold=dict(line=dict(color="#E31837",width=2),thickness=0.75,value=20))))
     fg.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Inter",color="#889"), height=240, margin=dict(l=25,r=25,t=55,b=15))
-    gauge_ph.plotly_chart(fg, use_container_width=True)
+    gauge_ph.plotly_chart(fg, use_container_width=True, key=f"gauge_{tick}")
 
     # RUL
     rul_ph.markdown(f'<div class="rul-box"><div class="lb">Predicted Remaining Useful Life</div><div class="vl">{rul:.1f}</div><div class="un">Hours until maintenance required</div></div>', unsafe_allow_html=True)
@@ -220,20 +220,20 @@ for tick in range(2000):
         f.update_layout(title=dict(text=title, font=dict(size=12, color="#a0b0c4")), showlegend=False, **CL)
         return f
 
-    vib_ph.plotly_chart(make_chart(df_h, "Vibration_Velocity_mm_s", "Vibration Velocity (mm/s)", "#4da6ff", "rgba(77,166,255,0.06)", DANGER_VIB), use_container_width=True)
-    temp_ph.plotly_chart(make_chart(df_h, "Motor_Temperature_C", "Motor Temperature (°C)", "#FFBF00", "rgba(255,191,0,0.05)", DANGER_TEMP), use_container_width=True)
+    vib_ph.plotly_chart(make_chart(df_h, "Vibration_Velocity_mm_s", "Vibration Velocity (mm/s)", "#4da6ff", "rgba(77,166,255,0.06)", DANGER_VIB), use_container_width=True, key=f"vib_{tick}")
+    temp_ph.plotly_chart(make_chart(df_h, "Motor_Temperature_C", "Motor Temperature (°C)", "#FFBF00", "rgba(255,191,0,0.05)", DANGER_TEMP), use_container_width=True, key=f"temp_{tick}")
 
     fac = go.Figure()
     fac.add_trace(go.Scatter(x=df_h["Timestamp"], y=df_h["Acoustic_Frequency_Hz"], mode="lines",
         line=dict(color="#a855f7", width=2.2), fill="tozeroy", fillcolor="rgba(168,85,247,0.05)"))
     fac.update_layout(title=dict(text="Acoustic Frequency (Hz)", font=dict(size=12, color="#a0b0c4")), showlegend=False, **CL)
-    ac_ph.plotly_chart(fac, use_container_width=True)
+    ac_ph.plotly_chart(fac, use_container_width=True, key=f"ac_{tick}")
 
     fld = go.Figure()
     fld.add_trace(go.Scatter(x=df_h["Timestamp"], y=df_h["Load_Tonnage"], mode="lines",
         line=dict(color="#06b6d4", width=2.2), fill="tozeroy", fillcolor="rgba(6,182,212,0.05)"))
     fld.update_layout(title=dict(text="Roll Load (Tonnes)", font=dict(size=12, color="#a0b0c4")), showlegend=False, **CL)
-    load_ph.plotly_chart(fld, use_container_width=True)
+    load_ph.plotly_chart(fld, use_container_width=True, key=f"load_{tick}")
 
     # Maintenance Recommendation
     if rul > 150:
