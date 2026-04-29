@@ -151,7 +151,7 @@ COST_PER_HOUR_DOWNTIME = 8.5
 # LIVE FRAGMENT — Only this block re-runs every 2 seconds.
 # The sidebar, header, and CSS above stay completely untouched.
 # ====================================================================
-@st.fragment(run_every=2)
+@st.fragment(run_every=5)
 def live_dashboard():
     data_gen = st.session_state.data_gen
     r = next(data_gen)
