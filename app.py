@@ -88,6 +88,11 @@ section[data-testid="stSidebar"] *{color:#a0b0c4!important}
 .rec{background:rgba(13,21,38,0.8);border-left:3px solid #4da6ff;border-radius:0 10px 10px 0;padding:14px 16px;margin-top:8px}
 .rec .rt{font-size:12px;font-weight:700;color:#c8d6e5}
 .rec .rd{font-size:11px;color:#889;margin-top:4px}
+.fm{background:rgba(13,21,38,0.85);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:20px;text-align:center}
+.fm .fi{font-size:32px;margin-bottom:6px}
+.fm .fn{font-size:14px;font-weight:700;color:#c8d6e5;margin-bottom:4px}
+.fm .fd{font-size:11px;color:#889;line-height:1.5}
+.fm .fc{display:inline-block;padding:3px 10px;border-radius:16px;font-size:10px;font-weight:700;margin-top:8px}
 </style>""", unsafe_allow_html=True)
 
 # --- SIDEBAR (static — rendered once) ---
@@ -127,6 +132,10 @@ if 'start_time' not in st.session_state:
     st.session_state.start_time = datetime.now()
 if 'data_gen' not in st.session_state:
     st.session_state.data_gen = get_realtime_data_generator()
+if 'rul_history' not in st.session_state:
+    st.session_state.rul_history = []
+if 'state_time' not in st.session_state:
+    st.session_state.state_time = {"green": 0, "amber": 0, "red": 0}
 
 # Chart layout constants
 CL = dict(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(10,16,32,0.6)",
@@ -156,6 +165,11 @@ def live_dashboard():
     X = pd.DataFrame([r])[feature_cols]
     rul = max(0.0, float(model.predict(scaler.transform(X))[0]))
     health = min(100.0, max(0.0, (rul / 250.0) * 100))
+
+    # Track RUL over time for trend chart
+    st.session_state.rul_history.append({"Timestamp": r["Timestamp"], "RUL": rul})
+    if len(st.session_state.rul_history) > 100:
+        st.session_state.rul_history = st.session_state.rul_history[-100:]
 
     # --- KPI ROW ---
     st.markdown('<div class="sec">📡 Live Sensor Readings</div>', unsafe_allow_html=True)
@@ -204,6 +218,7 @@ def live_dashboard():
             st.session_state.action_log.insert(0, {"Time": datetime.now().strftime("%H:%M:%S"), "Level": "Red", "Detail": f"CRITICAL — RUL is {rul:.1f}h — stop mill immediately"})
             st.session_state.alert_count["red"] += 1
     st.session_state.last_alert_level = current_level
+    st.session_state.state_time[current_level] += 2  # each tick is ~2 seconds
 
     # ROI
     uptime_min = (datetime.now() - st.session_state.start_time).total_seconds() / 60
@@ -232,6 +247,58 @@ def live_dashboard():
     c3, c4 = st.columns(2)
     c3.plotly_chart(make_chart(df_h, "Acoustic_Frequency_Hz", "Acoustic Frequency (Hz)", "#a855f7", "rgba(168,85,247,0.05)"), use_container_width=True)
     c4.plotly_chart(make_chart(df_h, "Load_Tonnage", "Roll Load (Tonnes)", "#06b6d4", "rgba(6,182,212,0.05)"), use_container_width=True)
+
+    # --- PREDICTIVE ANALYTICS ---
+    st.markdown('<div class="sec">📊 Predictive Analytics</div>', unsafe_allow_html=True)
+    pa_c1, pa_c2 = st.columns(2)
+
+    # RUL Trend Line
+    with pa_c1:
+        rul_df = pd.DataFrame(st.session_state.rul_history)
+        if len(rul_df) > 1:
+            rul_fig = go.Figure()
+            rul_fig.add_trace(go.Scatter(
+                x=rul_df["Timestamp"], y=rul_df["RUL"], mode="lines+markers",
+                line=dict(color="#4da6ff", width=2.5),
+                marker=dict(size=3, color="#4da6ff"),
+                fill="tozeroy", fillcolor="rgba(77,166,255,0.06)"
+            ))
+            rul_fig.add_hline(y=72, line_dash="dash", line_color="#FFBF00", line_width=1,
+                annotation_text="Warning", annotation_font_color="#FFBF00", annotation_font_size=9)
+            rul_fig.add_hline(y=24, line_dash="dash", line_color="#E31837", line_width=1,
+                annotation_text="Critical", annotation_font_color="#E31837", annotation_font_size=9)
+            rul_fig.update_layout(
+                title=dict(text="RUL Trend — Remaining Useful Life Over Time", font=dict(size=12, color="#a0b0c4")),
+                showlegend=False, **CL
+            )
+            st.plotly_chart(rul_fig, use_container_width=True)
+        else:
+            st.markdown('<div style="text-align:center;padding:60px;color:#556">Building RUL trend...</div>', unsafe_allow_html=True)
+
+    # Sensor Correlation Heatmap
+    with pa_c2:
+        if len(df_h) > 3:
+            corr_labels = {"Vibration_Velocity_mm_s": "Vibration", "Motor_Temperature_C": "Temperature",
+                           "Acoustic_Frequency_Hz": "Acoustic", "Load_Tonnage": "Load"}
+            corr_df = df_h[feature_cols].rename(columns=corr_labels)
+            corr_matrix = corr_df.corr()
+            hm_fig = go.Figure(go.Heatmap(
+                z=corr_matrix.values, x=corr_matrix.columns, y=corr_matrix.columns,
+                colorscale=[[0, "#0a1020"], [0.5, "#0033A0"], [1, "#4da6ff"]],
+                text=[[f"{v:.2f}" for v in row] for row in corr_matrix.values],
+                texttemplate="%{text}", textfont=dict(size=12, color="#fff"),
+                showscale=False, zmin=-1, zmax=1
+            ))
+            hm_fig.update_layout(
+                title=dict(text="Sensor Correlation Matrix", font=dict(size=12, color="#a0b0c4")),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(10,16,32,0.6)",
+                font=dict(family="Inter", color="#889", size=11),
+                margin=dict(l=80, r=20, t=40, b=80), height=280,
+                xaxis=dict(side="bottom"), yaxis=dict(autorange="reversed")
+            )
+            st.plotly_chart(hm_fig, use_container_width=True)
+        else:
+            st.markdown('<div style="text-align:center;padding:60px;color:#556">Building correlation matrix...</div>', unsafe_allow_html=True)
 
     # --- FEATURE IMPORTANCE + SESSION STATS ---
     st.markdown('<div class="sec">🔬 AI Model Insights & Session Statistics</div>', unsafe_allow_html=True)
@@ -303,6 +370,81 @@ def live_dashboard():
             ''', unsafe_allow_html=True)
         else:
             st.markdown('<div style="text-align:center;padding:40px;color:#556">Collecting data...</div>', unsafe_allow_html=True)
+
+    # --- SHIFT PERFORMANCE & DIAGNOSTICS ---
+    st.markdown('<div class="sec">⏱️ Shift Performance & Failure Diagnostics</div>', unsafe_allow_html=True)
+    sp_c1, sp_c2, sp_c3 = st.columns([1, 1.2, 0.8])
+
+    # Uptime/Downtime Donut
+    with sp_c1:
+        st_data = st.session_state.state_time
+        total = max(1, st_data["green"] + st_data["amber"] + st_data["red"])
+        donut_vals = [st_data["green"], st_data["amber"], st_data["red"]]
+        donut_pcts = [v / total * 100 for v in donut_vals]
+        donut_fig = go.Figure(go.Pie(
+            values=donut_vals, labels=["Healthy", "Warning", "Critical"],
+            hole=0.65, marker=dict(colors=["#1e8e3e", "#FFBF00", "#E31837"]),
+            textinfo="label+percent", textfont=dict(size=11, color="#c8d6e5"),
+            hoverinfo="label+value+percent",
+            sort=False
+        ))
+        donut_fig.update_layout(
+            title=dict(text="Shift Health Distribution", font=dict(size=12, color="#a0b0c4")),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Inter", color="#889"), height=280,
+            margin=dict(l=20, r=20, t=40, b=20), showlegend=False,
+            annotations=[dict(text=f"{donut_pcts[0]:.0f}%<br>Uptime", x=0.5, y=0.5,
+                font=dict(size=16, color="#34d058", family="Inter"), showarrow=False)]
+        )
+        st.plotly_chart(donut_fig, use_container_width=True)
+
+    # Predicted Failure Mode
+    with sp_c2:
+        baselines = {"Vibration_Velocity_mm_s": 2.5, "Motor_Temperature_C": 58.0,
+                     "Acoustic_Frequency_Hz": 1000.0, "Load_Tonnage": 30.0}
+        deviations = {}
+        for col, base in baselines.items():
+            deviations[col] = abs(r[col] - base) / base
+        dominant = max(deviations, key=deviations.get)
+        failure_modes = {
+            "Vibration_Velocity_mm_s": ("⚙️", "Bearing Wear", "Excessive vibration indicates bearing surface degradation. Likely causes: lubricant breakdown, cage fatigue, or contamination ingress.", "#4da6ff"),
+            "Motor_Temperature_C": ("🔥", "Motor Overheat", "Elevated motor temperature suggests winding insulation stress or cooling system degradation. Check coolant flow and fan belt.", "#FFBF00"),
+            "Acoustic_Frequency_Hz": ("🔊", "Roll Surface Defect", "Acoustic emission shift indicates micro-cracks on roll surface or strip edge cracking. Inspect roll crowning.", "#a855f7"),
+            "Load_Tonnage": ("⚖️", "Roll Misalignment", "Abnormal load distribution suggests roll gap asymmetry or strip wandering. Check hydraulic gap actuators.", "#06b6d4"),
+        }
+        fm_icon, fm_name, fm_desc, fm_color = failure_modes[dominant]
+        dev_pct = deviations[dominant] * 100
+        confidence = min(95, max(30, dev_pct * 1.5))
+        st.markdown(f'''
+        <div class="fm">
+            <div class="fi">{fm_icon}</div>
+            <div class="fn">Predicted: {fm_name}</div>
+            <div class="fd">{fm_desc}</div>
+            <div class="fc" style="background:rgba({"77,166,255" if fm_color=="#4da6ff" else "255,191,0" if fm_color=="#FFBF00" else "168,85,247" if fm_color=="#a855f7" else "6,182,212"},0.2);color:{fm_color}">
+                Confidence: {confidence:.0f}% · Deviation: {dev_pct:.1f}%
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    # Shift Report Download
+    with sp_c3:
+        st.markdown('<div style="margin-top:20px"></div>', unsafe_allow_html=True)
+        if len(df_h) > 0:
+            csv_data = df_h.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Shift Report",
+                data=csv_data,
+                file_name=f"furnaceguard_shift_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+            )
+        st.markdown(f'''
+        <div style="margin-top:16px;background:rgba(13,21,38,0.85);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;text-align:center">
+            <div style="font-size:10px;color:#667;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">Session Duration</div>
+            <div style="font-size:24px;font-weight:800;color:#fff;margin:4px 0">{uptime_min:.1f} min</div>
+            <div style="font-size:10px;color:#556">{len(df_h)} readings collected</div>
+            <div style="font-size:10px;color:#556;margin-top:4px">{len(st.session_state.action_log)} alerts logged</div>
+        </div>
+        ''', unsafe_allow_html=True)
 
     # --- MAINTENANCE RECOMMENDATION ---
     st.markdown('<div class="sec">🔧 Maintenance Recommendation</div>', unsafe_allow_html=True)
